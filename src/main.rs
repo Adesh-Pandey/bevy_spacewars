@@ -121,6 +121,10 @@ fn shoot_bullets(
                 },
             ));
         }
+        commands.spawn(AudioBundle {
+            source: asset_server.load("sounds/shoot.ogg"),
+            ..default()
+        });
     }
 }
 
