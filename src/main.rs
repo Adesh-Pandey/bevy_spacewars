@@ -1,8 +1,19 @@
 use bevy::prelude::*;
 use rand::Rng;
 
+pub const PLAYER_SPEED: f32 = 200.;
+pub const MINIONS_SPEED: f32 = 75.;
+pub const BULLET_SPEED: f32 = 250.;
+
+pub const PLAYER_SIZE: f32 = 65.;
+pub const MINIONS_SIZE: f32 = 50.;
+pub const BULLET_SIZE: f32 = 10.;
+
 #[derive(Resource)]
 struct MyTimer(Timer);
+
+#[derive(Component)]
+struct ColorText;
 
 pub struct MinionPlugin;
 impl Plugin for MinionPlugin {
@@ -26,6 +37,8 @@ fn main() {
                 remove_bullets,
                 update_enemies,
                 remove_enemies,
+                bullet_enemy_crash,
+                enemies_player_crash,
             ),
         )
         .add_systems(Update, add_ememies)
@@ -62,10 +75,13 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             texture: asset_server.load("player_spaceship.png"),
             transform: Transform {
                 translation: Vec3::new(0., 0., 0.),
-                scale: Vec3::new(0.2, 0.2, 0.),
+
                 ..default()
             },
-
+            sprite: Sprite {
+                custom_size: Some(Vec2::new(PLAYER_SIZE, PLAYER_SIZE)),
+                ..default()
+            },
             ..default()
         },
         Player {
@@ -80,7 +96,7 @@ fn sprite_movement(
     keyboard: Res<Input<KeyCode>>,
     mut sprite_position: Query<(&mut Player, &mut Transform)>,
 ) {
-    let speed = 200. * time.delta_seconds();
+    let speed = PLAYER_SPEED * time.delta_seconds();
     for (mut player, mut transform) in &mut sprite_position {
         if keyboard.pressed(KeyCode::Up) && transform.translation.y < 300. {
             transform.translation.y += speed;
@@ -109,14 +125,16 @@ fn shoot_bullets(
                     texture: asset_server.load("bullet.png"),
                     transform: Transform {
                         translation: Vec3::new(player.coord.0, player.coord.1, 0.),
-                        scale: Vec3::new(0.08, 0.08, 0.),
                         ..default()
                     },
-
+                    sprite: Sprite {
+                        custom_size: Some(Vec2::new(BULLET_SIZE, BULLET_SIZE)),
+                        ..default()
+                    },
                     ..default()
                 },
                 Bullet {
-                    speed: 200.,
+                    speed: BULLET_SPEED,
                     coord: player.coord,
                 },
             ));
@@ -168,14 +186,16 @@ fn add_ememies(
                 texture: asset_server.load("minions.png"),
                 transform: Transform {
                     translation: Vec3::new(coord.0, coord.1, 0.),
-                    scale: Vec3::new(0.1, 0.1, 0.),
                     ..default()
                 },
-
+                sprite: Sprite {
+                    custom_size: Some(Vec2::new(MINIONS_SIZE, MINIONS_SIZE)),
+                    ..default()
+                },
                 ..default()
             },
             Minions {
-                speed: 75.,
+                speed: MINIONS_SPEED,
                 coord: Position {
                     x: coord.0,
                     y: coord.1,
@@ -198,6 +218,79 @@ fn remove_enemies(mut commands: Commands, minions: Query<(Entity, &Minions)>) {
     for (entity, minion) in &mut minions.iter() {
         if minion.coord.y < -400. {
             commands.entity(entity).despawn();
+        }
+    }
+}
+
+fn bullet_enemy_crash(
+    minions: Query<(Entity, &Transform), With<Minions>>,
+    mut commands: Commands,
+    bullets: Query<(Entity, &Transform), With<Bullet>>,
+    asset_server: Res<AssetServer>,
+) {
+    for (minion_entity, minion_transform) in &mut minions.iter() {
+        let minimum_distance = MINIONS_SIZE / 2. + BULLET_SIZE / 2.;
+
+        for (bullet_entity, bullet_transform) in &mut bullets.iter() {
+            let distance = minion_transform
+                .translation
+                .distance(bullet_transform.translation);
+
+            if distance < minimum_distance {
+                commands.entity(minion_entity).despawn();
+                commands.entity(bullet_entity).despawn();
+                commands.spawn(AudioBundle {
+                    source: asset_server.load("sounds/minion_kill.ogg"),
+                    ..default()
+                });
+            }
+        }
+    }
+}
+
+fn enemies_player_crash(
+    minions: Query<(Entity, &Transform), With<Minions>>,
+    mut commands: Commands,
+    players: Query<(Entity, &Transform), With<Player>>,
+    asset_server: Res<AssetServer>,
+) {
+    for (minion_entity, minion_transform) in &mut minions.iter() {
+        let minimum_distance = MINIONS_SIZE / 2. + PLAYER_SIZE / 2.;
+
+        for (player_entity, player_transform) in &mut players.iter() {
+            let distance = minion_transform
+                .translation
+                .distance(player_transform.translation);
+
+            if distance < minimum_distance {
+                commands.entity(minion_entity).despawn();
+                commands.entity(player_entity).despawn();
+                commands.spawn(AudioBundle {
+                    source: asset_server.load("sounds/game_over.ogg"),
+                    ..default()
+                });
+
+                // wanna spwan big text saying Game Over
+
+                commands.spawn((
+                    TextBundle::from_section(
+                        "GAME OVER",
+                        TextStyle {
+                            font: asset_server.load("fonts/RubikBrokenFax-Regular.ttf"),
+                            font_size: 100.0,
+                            ..default()
+                        },
+                    )
+                    .with_text_alignment(TextAlignment::Center)
+                    .with_style(Style {
+                        position_type: PositionType::Absolute,
+                        bottom: Val::Px(0.0),
+                        right: Val::Px(0.0),
+                        ..default()
+                    }),
+                    ColorText,
+                ));
+            }
         }
     }
 }
