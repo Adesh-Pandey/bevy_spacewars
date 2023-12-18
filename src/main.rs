@@ -1,7 +1,3 @@
-//! Renders a 2D scene containing a single, moving sprite.
-
-use std::time::Instant;
-
 use bevy::prelude::*;
 use rand::Rng;
 
